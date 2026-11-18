@@ -1120,11 +1120,25 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
     excludedFamilyKeys,
     targetedMuscle: base.primaryMuscle,
   });
-  const nextAlternative = aiAlternatives.find((exercise) => {
+  const aiAlternative = aiAlternatives.find((exercise) => {
     const equipmentId = equipmentIdByAlias.get(normalizeExerciseValue(exercise.machine));
     return normalizeExerciseValue(exercise.machine) === "bodyweight"
       || Boolean(equipmentId && (fullGym || availableEquipmentIds.has(equipmentId)));
   });
+  // Only consult the bundled catalogue when AI could not provide one valid
+  // alternative. The catalogue is a safety net, never the source that limits
+  // the model's exercise choices.
+  const catalogueAlternative = aiAlternative ? undefined : exerciseRecommendationService.getRecommendedExercises({
+    targetMuscles: [base.primaryMuscle],
+    sessionDurationMinutes: workout.durationMin ?? 60,
+    requestedCount: 1,
+    equipmentMode: fullGym ? "FULL_GYM" : "USER_EQUIPMENT",
+    availableEquipment: fallbackEquipment.flatMap((item) => [item.name, ...item.aliases]),
+    excludedExerciseNames: usedNames.map((row) => row.name),
+    excludedExerciseFamilyKeys: [...excludedFamilyKeys],
+    selectionSeed: `swap:${req.params.id}:${workoutExerciseId}`,
+  }).exercises[0];
+  const nextAlternative = aiAlternative || catalogueAlternative;
   if (!nextAlternative) {
     return res.status(422).json({
       error: `Sorry, we couldn't find a suitable alternative for "${base.name}" with your available equipment. We're constantly improving FACHS and working to make better recommendations. Please try another exercise or update your gym equipment.`,
