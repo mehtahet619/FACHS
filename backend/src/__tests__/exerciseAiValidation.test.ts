@@ -43,6 +43,72 @@ describe("OpenRouter workout exercise generation", () => {
     expect(result.every((exercise) => exercise.primaryMuscle === "back")).toBe(true);
   });
 });
+ 
+  it("keeps valid OpenRouter candidates and fills missing slots through Anthropic", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "openrouter-test-key");
+    vi.stubEnv("OPENROUTER_MODEL", "test/model");
+    vi.stubEnv("ANTHROPIC_API_KEY", "anthropic-test-key");
+    vi.stubEnv("ANTHROPIC_MODEL", "claude-test");
+    const openRouterCandidate = {
+      exercise: "Chest Supported Dumbbell Row",
+      machine: "Dumbbells",
+      muscle: "back",
+      secondaryMuscles: ["biceps"],
+    };
+    const anthropicCandidate = {
+      exercise: "Straight Arm Cable Pulldown",
+      machine: "Cable Machine",
+      muscle: "back",
+      secondaryMuscles: ["lats"],
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({
+          exercises: [openRouterCandidate, {
+            exercise: "Cable Row",
+            machine: "Unknown Machine",
+            muscle: "back",
+          }],
+        }) } }] }),
+      })
+      // The second OpenRouter attempt asks only for the missing slot. It
+      // repeats the accepted movement, so validation rejects it and failover
+      // continues rather than throwing away the first valid candidate.
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({
+          exercises: [openRouterCandidate],
+        }) } }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ content: [{ type: "text", text: JSON.stringify({
+          exercises: [anthropicCandidate],
+        }) }] }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getAiExerciseFallback({
+      targetMuscles: ["back"],
+      sessionDurationMinutes: 60,
+      count: 2,
+      equipment: [
+        { name: "Dumbbells", aliases: [] },
+        { name: "Cable Machine", aliases: ["Cable"] },
+      ],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect(fetchMock.mock.calls[2][0]).toBe("https://api.anthropic.com/v1/messages");
+    expect(result.map((exercise) => exercise.exercise)).toEqual([
+      "Chest Supported Dumbbell Row",
+      "Straight Arm Cable Pulldown",
+    ]);
+    expect(result.every((exercise) => exercise.primaryMuscle === "back")).toBe(true);
+    expect(new Set(result.map((exercise) => exercise.sourceIndex)).size).toBe(2);
+  });
 
 describe("uncatalogued exercise AI validation", () => {
   it("uses OpenRouter first and canonicalizes model muscle/equipment values", async () => {
@@ -109,7 +175,7 @@ describe("uncatalogued exercise AI validation", () => {
     expect(result).toMatchObject({ valid: false, confidence: 0.99 });
   });
 
-  it("does not fall through to other providers when OpenRouter rejects an exercise", async () => {
+  it("falls through to Anthropic when OpenRouter cannot validate an exercise", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     vi.stubEnv("OPENROUTER_API_KEY", "openrouter-test-key");
     vi.stubEnv("ANTHROPIC_API_KEY", "anthropic-test-key");
@@ -137,9 +203,15 @@ describe("uncatalogued exercise AI validation", () => {
       equipment: ["Dumbbells"],
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0][0]).toBe("https://openrouter.ai/api/v1/chat/completions");
-    expect(result).toMatchObject({ valid: false, confidence: 0.9 });
+    expect(fetchMock.mock.calls[1][0]).toBe("https://api.anthropic.com/v1/messages");
+    expect(result).toMatchObject({
+      valid: true,
+      canonicalName: "Meadows Row",
+      primaryMuscle: "back",
+      equipmentName: "Dumbbells",
+    });
   });
 
   it("returns no result when no validation provider is configured", async () => {
