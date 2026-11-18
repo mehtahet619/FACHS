@@ -2219,7 +2219,8 @@ function renderWorkout(workout, plan) {
     const setLabel = `${item.completedSetRows.length}/${item.targetSets} sets`;
     const repLabel = `${Number(exercise.repRangeLow) || 1}–${Number(exercise.repRangeHigh) || Number(exercise.repRangeLow) || 1} reps`;
     const hasLoggedSets = item.completedSetRows.length > 0;
-    const swapButton = canEditWorkout && !hasLoggedSets && exercise.status !== "completed" && exercise.status !== "skipped"
+    const canChangeExercise = canEditWorkout && !hasLoggedSets && exercise.status !== "completed" && exercise.status !== "skipped";
+    const swapButton = canChangeExercise
       ? `<button class="btn btn-outline workout-swap-btn" data-action="swap" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}">Swap</button>`
       : "";
     const dragHandle = canEditWorkout
@@ -2227,10 +2228,9 @@ function renderWorkout(workout, plan) {
       : `<span class="workout-exercise-number">${isDone && !skipped ? "✓" : index + 1}</span>`;
     const controls = canEditWorkout
       ? `<div class="workout-exercise-actions">
-          <button class="btn btn-outline" data-action="edit-exercise" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}">Edit exercise</button>
-          ${swapButton}
+          ${canChangeExercise ? `<button class="btn btn-outline" data-action="edit-exercise" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}">Edit exercise</button>${swapButton}` : hasLoggedSets ? "<small>Exercise changes are locked after logging a set.</small>" : ""}
         </div>
-        <form class="workout-edit-form" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}" data-original-exercise-id="${escapeWorkoutText(exercise.exerciseId || "")}" data-confirmed-exercise-id="${escapeWorkoutText(exercise.exerciseId || "")}" hidden>
+        ${canChangeExercise ? `<form class="workout-edit-form" data-id="${escapeWorkoutText(exercise.workoutExerciseId)}" data-original-exercise-id="${escapeWorkoutText(exercise.exerciseId || "")}" data-confirmed-exercise-id="${escapeWorkoutText(exercise.exerciseId || "")}" hidden>
           <label>Exercise name<input name="exerciseName" maxlength="100" required value="${escapeWorkoutText(exercise.exerciseName)}"></label>
           <label>Target muscle<select name="targetMuscle" required>${targetMuscles.map((muscle) => `<option value="${escapeWorkoutText(muscle)}" ${muscle.toLowerCase() === String(exercise.primaryMuscle || "").toLowerCase() ? "selected" : ""}>${escapeWorkoutText(muscle)}</option>`).join("")}</select></label>
           <label>Equipment<input name="equipmentName" list="workout-equipment-options" maxlength="80" required value="${escapeWorkoutText(equipment)}"></label>
@@ -2238,7 +2238,7 @@ function renderWorkout(workout, plan) {
           <div class="workout-edit-suggestions" hidden></div>
           <button class="btn btn-outline" type="button" data-action="cancel-edit">Cancel</button>
           <small>FACHS will rebuild the other exercises to cover the remaining workout targets.</small>
-        </form>`
+        </form>` : ""}`
       : swapButton;
     const demo = exercise.demoVideo || { kind: "instructions", title: `${exercise.exerciseName} instructions` };
     const hasDemoVideo = demo.kind === "video" && Boolean(demo.videoId);
@@ -2572,7 +2572,7 @@ function renderWorkout(workout, plan) {
       submitButton.disabled = true;
       submitButton.textContent = "Rebalancing workout…";
       try {
-        const result = await Api.post(`/workouts/${workout.id}/edit-exercise`, body, { timeoutMs: 30000 });
+        const result = await Api.post(`/workouts/${workout.id}/edit-exercise`, body, { timeoutMs: 60000 });
         await loadWorkout();
         showWorkoutNotice(`Exercise updated. FACHS refreshed ${result.rebalancedExerciseCount} other movement${result.rebalancedExerciseCount === 1 ? "" : "s"} for workout coverage.`, "success");
       } catch (error) {
