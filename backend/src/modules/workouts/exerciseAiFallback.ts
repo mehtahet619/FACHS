@@ -294,30 +294,37 @@ export async function getAiExerciseFallback(input: ExerciseFallbackInput): Promi
   const acceptedFamilies = new Set([...(input.excludedFamilyKeys ?? [])].map(normalizeExerciseValue));
 
   for (const provider of configuredProviders()) {
-    if (accepted.length >= input.count) break;
-    const requestInput: ExerciseFallbackInput = {
-      ...input,
-      count: input.count - accepted.length,
-      excludedExerciseNames: [...acceptedNames],
-      excludedFamilyKeys: [...acceptedFamilies],
-    };
-    try {
-      const raw = await callProvider(provider, requestInput);
-      const candidates = validatedExercises(raw, requestInput);
-      for (const candidate of candidates) {
-        const nameKey = normalizeExerciseValue(candidate.exercise);
-        const familyKey = normalizeExerciseValue(exerciseFamilyKey(candidate.exercise));
-        if (!nameKey || !familyKey || acceptedNames.has(nameKey) || acceptedFamilies.has(familyKey)) continue;
-        acceptedNames.add(nameKey);
-        acceptedFamilies.add(familyKey);
-        accepted.push({ ...candidate, sourceIndex: -accepted.length - 1 });
-        if (accepted.length >= input.count) break;
+    // Retry once with the missing-slot count and an updated exclusion list.
+    // This asks for genuinely different movements rather than discarding good
+    // candidates or repeating the same failed full-list request.
+    for (let attempt = 0; attempt < 2 && accepted.length < input.count; attempt += 1) {
+      const requestInput: ExerciseFallbackInput = {
+        ...input,
+        count: input.count - accepted.length,
+        excludedExerciseNames: [...acceptedNames],
+        excludedFamilyKeys: [...acceptedFamilies],
+      };
+      try {
+        const raw = await callProvider(provider, requestInput);
+        const candidates = validatedExercises(raw, requestInput);
+        let added = 0;
+        for (const candidate of candidates) {
+          const nameKey = normalizeExerciseValue(candidate.exercise);
+          const familyKey = normalizeExerciseValue(exerciseFamilyKey(candidate.exercise));
+          if (!nameKey || !familyKey || acceptedNames.has(nameKey) || acceptedFamilies.has(familyKey)) continue;
+          acceptedNames.add(nameKey);
+          acceptedFamilies.add(familyKey);
+          accepted.push({ ...candidate, sourceIndex: -accepted.length - 1 });
+          added += 1;
+          if (accepted.length >= input.count) break;
+        }
+        if (accepted.length < input.count) {
+          console.warn(`[workouts] ${provider.name} attempt ${attempt + 1} added ${added} valid candidate(s); ${input.count - accepted.length} slot(s) remain.`);
+        }
+        if (added === 0) break;
+      } catch (error) {
+        console.warn(`[workouts] ${provider.name} attempt ${attempt + 1} failed: ${error instanceof Error ? error.message : String(error)}`);
       }
-      if (accepted.length < input.count) {
-        console.warn(`[workouts] ${provider.name} supplied ${candidates.length} valid candidates; ${input.count - accepted.length} slot(s) remain.`);
-      }
-    } catch (error) {
-      console.warn(`[workouts] ${provider.name} exercise generation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
