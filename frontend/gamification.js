@@ -175,34 +175,55 @@
     return data;
   }
 
+  let inviteAcceptanceRequest = null;
+
+  async function acceptPendingInvite() {
+    if (inviteAcceptanceRequest) return inviteAcceptanceRequest;
+
+    const pending = sessionStorage.getItem("fitos_pending_invite") || new URLSearchParams(location.search).get("invite");
+    if (!pending) return false;
+
+    inviteAcceptanceRequest = (async () => {
+      try {
+        await Api.post("/friends/accept-invite", { code: pending });
+        // Clear only after the server confirms the relationship (including an
+        // already-existing relationship, which the endpoint reports as 200).
+        sessionStorage.removeItem("fitos_pending_invite");
+        return true;
+      } catch (error) {
+        if ([400, 404, 409].includes(error.status)) {
+          sessionStorage.removeItem("fitos_pending_invite");
+          const status = document.getElementById("fitos-gamification-status");
+          if (status) status.textContent = error.status === 409
+            ? "This friend link is already connected."
+            : "This friend invite link is invalid or no longer available.";
+          return false;
+        }
+        // Keep the pending code on network/server errors so the next
+        // authenticated refresh can safely retry it.
+        throw error;
+      } finally {
+        inviteAcceptanceRequest = null;
+      }
+    })();
+
+    return inviteAcceptanceRequest;
+  }
+
   async function syncFriends(rows) {
     const targetRows = rows || document.getElementById("fitos-private-friend-rows");
-    if (!targetRows) return;
     try {
+      // Accept an invite as soon as the session is authenticated. Do not make
+      // this depend on the Friends screen/leaderboard DOM being mounted.
       const me = await Api.get("/auth/me");
       if (!me?.authenticated) return;
 
-      const pending = sessionStorage.getItem("fitos_pending_invite") || new URLSearchParams(location.search).get("invite");
-      if (pending) {
-        try {
-          await Api.post("/friends/accept-invite", { code: pending });
-          sessionStorage.removeItem("fitos_pending_invite");
-        } catch (error) {
-          if ([400, 404, 409].includes(error.status)) {
-            sessionStorage.removeItem("fitos_pending_invite");
-            const status = document.getElementById("fitos-gamification-status");
-            if (status) status.textContent = error.status === 409
-              ? "This account is already linked to another invite. The existing friend link was kept."
-              : "This friend invite link is invalid or no longer available.";
-          } else {
-            throw error;
-          }
-        }
-      }
+      await acceptPendingInvite();
+      if (!targetRows) return;
 
       await refreshRewards(targetRows);
     } catch (error) {
-      targetRows.textContent = "Friends leaderboard is temporarily unavailable. Please try again.";
+      if (targetRows) targetRows.textContent = "Friends leaderboard is temporarily unavailable. Please try again.";
       console.warn("[FACHS] Could not sync the friend leaderboard.", error);
       throw error;
     }
