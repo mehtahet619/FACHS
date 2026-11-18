@@ -2645,7 +2645,7 @@ function renderWorkout(workout, plan) {
         const result = await Api.post(`/workouts/${workout.id}/replace-exercise`, {
           workoutExerciseId: button.dataset.id,
           reason: "user_preference",
-        });
+        }, { timeoutMs: 60000 });
         await loadWorkout();
         showWorkoutNotice(result.explanation || "Exercise updated to match your available equipment.", "success");
       } catch (error) {
