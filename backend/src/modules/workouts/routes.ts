@@ -1423,40 +1423,52 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
     ...equipmentAliases.filter((row) => availableIds.has(row.equipmentId)).map((row) => row.alias),
     "Bodyweight",
   ])];
-  // Use the curated exercise dataset first. The previous implementation called
-  // the AI-only fallback directly, so a missing/slow AI provider caused every
-  // manual edit to fail even when the local catalogue had valid exercises.
+  // AI owns exercise choice. The catalogue is consulted only for slots the
+  // configured models could not fill, so CSV coverage never limits AI output.
   const equipmentOptions = (fullGym
     ? allEquipment.filter((row) => normalizeExerciseValue(row.name) !== "no equipment")
     : allEquipment.filter((row) => availableIds.has(row.id))).map((row) => ({
       name: row.name,
       aliases: equipmentAliases.filter((alias) => alias.equipmentId === row.id).map((alias) => alias.alias),
     })).concat([{ name: "Bodyweight", aliases: [] }]);
-  const datasetResult = otherSlots.length
-    ? exerciseRecommendationService.getRecommendedExercises({
-      targetMuscles: updatedTargetMuscles,
+  const excludedExerciseNames = [
+    canonicalExerciseName,
+    ...otherSlots.map((exercise) => exercise.sourceExerciseName || exerciseById.get(exercise.exerciseId)?.name || ""),
+  ].filter(Boolean);
+  const excludedExerciseFamilyKeys = [
+    exerciseFamilyKey(canonicalExerciseName),
+    ...otherSlots.map((exercise) => exerciseFamilyKey(
+      exercise.sourceExerciseName || exerciseById.get(exercise.exerciseId)?.name || "",
+    )),
+  ].filter(Boolean);
+  const aiRecommendations = otherSlots.length
+    ? await getAiExerciseFallback({
+      targetMuscles: coverageTargets,
       sessionDurationMinutes: workout.durationMin,
-      requestedCount: otherSlots.length,
+      count: otherSlots.length,
+      equipment: equipmentOptions,
+      excludedExerciseNames,
+      excludedFamilyKeys: excludedExerciseFamilyKeys,
+    })
+    : [];
+  const missingRecommendationCount = Math.max(0, otherSlots.length - aiRecommendations.length);
+  const datasetResult = missingRecommendationCount
+    ? exerciseRecommendationService.getRecommendedExercises({
+      targetMuscles: coverageTargets,
+      sessionDurationMinutes: workout.durationMin,
+      requestedCount: missingRecommendationCount,
       availableEquipment: recommendationEquipment,
       equipmentMode: fullGym ? "FULL_GYM" : "USER_EQUIPMENT",
-      excludedExerciseNames: [canonicalExerciseName],
-      excludedExerciseFamilyKeys: [exerciseFamilyKey(canonicalExerciseName)],
+      excludedExerciseNames: [...excludedExerciseNames, ...aiRecommendations.map((exercise) => exercise.exercise)],
+      excludedExerciseFamilyKeys: [
+        ...excludedExerciseFamilyKeys,
+        ...aiRecommendations.map((exercise) => exerciseFamilyKey(exercise.exercise)),
+      ],
       selectionSeed: `edit:${req.params.id}:${slot.id}`,
     })
     : { exercises: [], requestedCount: 0, availableCount: 0, limitedByDataset: false };
   const datasetRecommendations = datasetResult.exercises;
-  const remainingRecommendationCount = Math.max(0, otherSlots.length - datasetRecommendations.length);
-  const aiRecommendations = remainingRecommendationCount
-    ? await getAiExerciseFallback({
-      targetMuscles: updatedTargetMuscles,
-      sessionDurationMinutes: workout.durationMin,
-      count: remainingRecommendationCount,
-      equipment: equipmentOptions,
-      excludedExerciseNames: [canonicalExerciseName, ...datasetRecommendations.map((exercise) => exercise.exercise)],
-      excludedFamilyKeys: [exerciseFamilyKey(canonicalExerciseName), ...datasetRecommendations.map((exercise) => exerciseFamilyKey(exercise.exercise))],
-    })
-    : [];
-  const recommendations = [...datasetRecommendations, ...aiRecommendations];
+  const recommendations = [...aiRecommendations, ...datasetRecommendations];
   if (recommendations.length !== otherSlots.length) {
     return res.status(422).json({
       code: "WORKOUT_REBALANCE_UNAVAILABLE",
