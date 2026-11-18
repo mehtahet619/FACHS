@@ -158,6 +158,7 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
 async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInput): Promise<string> {
   const prompt = [
     "You are selecting real, established resistance-training exercises, not inventing exercise names.",
+    "Do not limit choices to any supplied CSV, catalogue, or predefined exercise list. Use your full exercise knowledge to choose any established movement that matches the target muscles and available equipment.",
     `Workout target muscles: ${input.targetMuscles.join(", ")}.`,
     `Session duration: ${input.sessionDurationMinutes} minutes. Return exactly ${input.count} exercises.`,
     `Available equipment (use only these): ${input.equipment.map(({ name }) => name).join(", ")}.`,
