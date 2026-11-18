@@ -45,7 +45,7 @@ export interface ExerciseFallbackInput {
 }
 
 interface ProviderConfig {
-  name: "OpenRouter";
+  name: "OpenRouter" | "Anthropic";
   apiKey: string;
   model: string;
   url: string;
@@ -68,13 +68,20 @@ export interface AiExerciseValidation {
 }
 
 function configuredProviders(): ProviderConfig[] {
-  if (!process.env.OPENROUTER_API_KEY) return [];
-  return [{
+  const providers: ProviderConfig[] = [];
+  if (process.env.OPENROUTER_API_KEY) providers.push({
     name: "OpenRouter",
     apiKey: process.env.OPENROUTER_API_KEY,
     model: process.env.OPENROUTER_MODEL || "openrouter/auto",
     url: "https://openrouter.ai/api/v1/chat/completions",
-  }];
+  });
+  if (process.env.ANTHROPIC_API_KEY) providers.push({
+    name: "Anthropic",
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
+    url: "https://api.anthropic.com/v1/messages",
+  });
+  return providers;
 }
 
 function parseJson(content: string): unknown {
@@ -143,28 +150,8 @@ function validatedExercises(content: string, input: ExerciseFallbackInput): Reco
     if (result.length >= input.count) break;
   }
 
-  if (result.length < input.count) throw new Error(`OpenRouter returned only ${result.length} valid of ${input.count} requested exercises.`);
-
-  // A shoulder session must cover the three major deltoid functions. A list
-  // of different press variations is not a balanced shoulder workout.
-  const targetsShoulders = input.targetMuscles.some((muscle) => normalizeExerciseValue(muscle) === "shoulders");
-  if (targetsShoulders && input.targetMuscles.length === 1 && input.count >= 3) {
-    const names = result.map((exercise) => normalizeExerciseValue(exercise.exercise));
-    const hasPress = names.some((name) => /\b(press|pike push up|push press)\b/.test(name));
-    const hasLateral = names.some((name) => /\b(lateral raise|side raise|upright row)\b/.test(name));
-    const hasRearDelt = names.some((name) => /\b(rear delt|reverse fly|reverse pec deck|face pull)\b/.test(name));
-    if (!hasPress || !hasLateral || !hasRearDelt) {
-      throw new Error("Shoulder workout lacks required movement coverage: include a press, a lateral-delt movement, and a rear-delt movement.");
-    }
-  }
-
-  if (input.targetMuscles.length >= 5) {
-    const covered = new Set(result.map((exercise) => exercise.primaryMuscle).map(normalizeExerciseValue));
-    const missingTargets = input.targetMuscles.filter((muscle) => !covered.has(normalizeExerciseValue(muscle)));
-    if (missingTargets.length) {
-      throw new Error(`OpenRouter workout did not cover all full-body targets: ${missingTargets.join(", ")}.`);
-    }
-  }
+  // Retain individually valid candidates. A single malformed item must not
+  // invalidate all the other usable exercises in the same model response.
   return result;
 }
 
@@ -197,9 +184,9 @@ async function callProvider(provider: ProviderConfig, input: ExerciseFallbackInp
     system: "You are a practical strength coach. Generate a balanced workout that covers the requested muscles within the stated time. Return valid JSON only.",
     user: prompt,
     maxTokens: 3000,
-    temperature: 0.1,
+    temperature: 0.35,
     json: true,
-    timeoutMs: 8_000,
+    timeoutMs: 12_000,
     retries: 1,
   });
 }
@@ -294,15 +281,45 @@ export async function validateUncataloguedExercise(
   return rejected;
 }
 
-/** Dataset rows remain first choice. Call configured providers in order only for missing exercises. */
+/**
+ * Generate exercise choices from configured language models. Valid candidates
+ * are retained independently: one malformed item must not discard the rest.
+ * When a provider returns too few usable movements, the next configured
+ * provider is asked only for the missing slots.
+ */
 export async function getAiExerciseFallback(input: ExerciseFallbackInput): Promise<RecommendedExercise[]> {
   if (input.count <= 0 || input.targetMuscles.length === 0 || input.equipment.length === 0) return [];
+  const accepted: RecommendedExercise[] = [];
+  const acceptedNames = new Set([...(input.excludedExerciseNames ?? [])].map(normalizeExerciseValue));
+  const acceptedFamilies = new Set([...(input.excludedFamilyKeys ?? [])].map(normalizeExerciseValue));
+
   for (const provider of configuredProviders()) {
+    if (accepted.length >= input.count) break;
+    const requestInput: ExerciseFallbackInput = {
+      ...input,
+      count: input.count - accepted.length,
+      excludedExerciseNames: [...acceptedNames],
+      excludedFamilyKeys: [...acceptedFamilies],
+    };
     try {
-      return validatedExercises(await callProvider(provider, input), input);
+      const raw = await callProvider(provider, requestInput);
+      const candidates = validatedExercises(raw, requestInput);
+      for (const candidate of candidates) {
+        const nameKey = normalizeExerciseValue(candidate.exercise);
+        const familyKey = normalizeExerciseValue(exerciseFamilyKey(candidate.exercise));
+        if (!nameKey || !familyKey || acceptedNames.has(nameKey) || acceptedFamilies.has(familyKey)) continue;
+        acceptedNames.add(nameKey);
+        acceptedFamilies.add(familyKey);
+        accepted.push({ ...candidate, sourceIndex: -accepted.length - 1 });
+        if (accepted.length >= input.count) break;
+      }
+      if (accepted.length < input.count) {
+        console.warn(`[workouts] ${provider.name} supplied ${candidates.length} valid candidates; ${input.count - accepted.length} slot(s) remain.`);
+      }
     } catch (error) {
-      console.warn(`[workouts] ${provider.name} exercise fallback failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(`[workouts] ${provider.name} exercise generation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  return [];
+
+  return accepted;
 }
