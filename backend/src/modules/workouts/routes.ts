@@ -1088,12 +1088,12 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
 
   const usedNames = await db.all<{ name: string }>(
     `SELECT COALESCE(we.sourceExerciseName,e.name) as name FROM WorkoutExercise we JOIN Exercise e ON e.id = we.exerciseId WHERE we.workoutId = ?`, req.params.id);
-  const swapHistory = await db.all<{ familyKey: string }>(
-    `SELECT familyKey FROM WorkoutExerciseSwapHistory WHERE workoutExerciseId = ?`, workoutExerciseId);
-  const excludedFamilyKeys = new Set([
-    ...swapHistory.map((row) => row.familyKey),
-    ...usedNames.map((row) => exerciseFamilyKey(row.name)),
-  ]);
+  // Exclude movements currently present in this workout, but do not make
+  // swap history a permanent blacklist. A movement used earlier can become a
+  // valid alternative again once it is no longer in the active workout.
+  const excludedFamilyKeys = new Set(
+    usedNames.map((row) => exerciseFamilyKey(row.name)),
+  );
   const equipmentIdByAlias = new Map<string, string>();
   for (const row of allEquipmentRows) equipmentIdByAlias.set(normalizeExerciseValue(row.name), row.id);
   const equipmentAliases = await db.all<{ equipmentId: string; alias: string }>(
