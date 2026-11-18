@@ -1128,16 +1128,23 @@ workoutRouter.post("/:id/replace-exercise", async (req: AuthedRequest, res) => {
   // Only consult the bundled catalogue when AI could not provide one valid
   // alternative. The catalogue is a safety net, never the source that limits
   // the model's exercise choices.
-  const catalogueAlternative = aiAlternative ? undefined : exerciseRecommendationService.getRecommendedExercises({
-    targetMuscles: [base.primaryMuscle],
-    sessionDurationMinutes: workout.durationMin ?? 60,
-    requestedCount: 1,
-    equipmentMode: fullGym ? "FULL_GYM" : "USER_EQUIPMENT",
-    availableEquipment: fallbackEquipment.flatMap((item) => [item.name, ...item.aliases]),
-    excludedExerciseNames: usedNames.map((row) => row.name),
-    excludedExerciseFamilyKeys: [...excludedFamilyKeys],
-    selectionSeed: `swap:${req.params.id}:${workoutExerciseId}`,
-  }).exercises[0];
+  let catalogueAlternative: RecommendedExercise | undefined;
+  if (!aiAlternative) {
+    try {
+      catalogueAlternative = exerciseRecommendationService.getRecommendedExercises({
+        targetMuscles: [base.primaryMuscle],
+        sessionDurationMinutes: workout.durationMin ?? 60,
+        requestedCount: 1,
+        equipmentMode: fullGym ? "FULL_GYM" : "USER_EQUIPMENT",
+        availableEquipment: fallbackEquipment.flatMap((item) => [item.name, ...item.aliases]),
+        excludedExerciseNames: usedNames.map((row) => row.name),
+        excludedExerciseFamilyKeys: [...excludedFamilyKeys],
+        selectionSeed: `swap:${req.params.id}:${workoutExerciseId}`,
+      }).exercises[0];
+    } catch (error) {
+      console.warn(`[workouts] CSV swap fallback failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   const nextAlternative = aiAlternative || catalogueAlternative;
   if (!nextAlternative) {
     return res.status(422).json({
@@ -1466,22 +1473,26 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
     })
     : [];
   const missingRecommendationCount = Math.max(0, otherSlots.length - aiRecommendations.length);
-  const datasetResult = missingRecommendationCount
-    ? exerciseRecommendationService.getRecommendedExercises({
-      targetMuscles: coverageTargets,
-      sessionDurationMinutes: workout.durationMin,
-      requestedCount: missingRecommendationCount,
-      availableEquipment: recommendationEquipment,
-      equipmentMode: fullGym ? "FULL_GYM" : "USER_EQUIPMENT",
-      excludedExerciseNames: [...excludedExerciseNames, ...aiRecommendations.map((exercise) => exercise.exercise)],
-      excludedExerciseFamilyKeys: [
-        ...excludedExerciseFamilyKeys,
-        ...aiRecommendations.map((exercise) => exerciseFamilyKey(exercise.exercise)),
-      ],
-      selectionSeed: `edit:${req.params.id}:${slot.id}`,
-    })
-    : { exercises: [], requestedCount: 0, availableCount: 0, limitedByDataset: false };
-  const datasetRecommendations = datasetResult.exercises;
+  let datasetRecommendations: RecommendedExercise[] = [];
+  if (missingRecommendationCount > 0) {
+    try {
+      datasetRecommendations = exerciseRecommendationService.getRecommendedExercises({
+        targetMuscles: coverageTargets,
+        sessionDurationMinutes: workout.durationMin,
+        requestedCount: missingRecommendationCount,
+        availableEquipment: recommendationEquipment,
+        equipmentMode: fullGym ? "FULL_GYM" : "USER_EQUIPMENT",
+        excludedExerciseNames: [...excludedExerciseNames, ...aiRecommendations.map((exercise) => exercise.exercise)],
+        excludedExerciseFamilyKeys: [
+          ...excludedExerciseFamilyKeys,
+          ...aiRecommendations.map((exercise) => exerciseFamilyKey(exercise.exercise)),
+        ],
+        selectionSeed: `edit:${req.params.id}:${slot.id}`,
+      }).exercises;
+    } catch (error) {
+      console.warn(`[workouts] CSV edit fallback failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   const recommendations = [...aiRecommendations, ...datasetRecommendations];
   if (recommendations.length !== otherSlots.length) {
     return res.status(422).json({
