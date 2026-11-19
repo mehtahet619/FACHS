@@ -11,21 +11,6 @@
 
 The review bot uses static analysis and open-source tooling only. It does not call a paid AI API. CodeQL, ESLint security rules, SonarJS rules, Secretlint, and Danger provide the automated review. The optional application OpenAI integration is unrelated to PR review and is not used by these workflows.
 
-## Required GitHub settings
-
-Repository administrators must configure these manually:
-
-- Enable **Allow auto-merge** in repository settings.
-- Protect `main` and require pull requests.
-- Require these exact status checks: `lint`, `typecheck`, `test`, `build`, `codeql`, `secretlint`, and `danger`.
-- Require conversation resolution before merging.
-- Require at least one human approval for sensitive paths via `.github/CODEOWNERS`.
-- Keep the GitHub Actions workflow permission for pull requests at least `Read and write` so Danger and auto-merge can operate.
-- Add repository secrets `RENDER_API_DEPLOY_HOOK` and `RENDER_WEB_DEPLOY_HOOK` containing the two Render deploy-hook URLs.
-- These secrets are currently missing in this repository. Create one deploy hook per Render service in the Render dashboard, then add both values under **GitHub Settings > Secrets and variables > Actions** before merging to `main`; the deploy workflow intentionally fails with a clear error until both are configured.
-- Enable GitHub code scanning under **Settings > Code security and analysis** if CodeQL SARIF findings should be uploaded and shown in the Security tab. The workflow still runs CodeQL queries when upload is disabled.
-
-GitHub controls Actions minutes and CodeQL availability by repository visibility and current plan. See the current [GitHub pricing page](https://github.com/pricing) for the live private-repository quota; no fixed quota is duplicated here.
 
 ## Sensitive paths
 
