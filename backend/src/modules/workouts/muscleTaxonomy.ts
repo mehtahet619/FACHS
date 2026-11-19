@@ -12,6 +12,9 @@ const MUSCLE_GROUPS: Record<string, string[]> = {
     "rhomboid", "rhomboids", "rhomboid major", "rhomboid minor", "traps", "trapezius",
     "lower back", "erector spinae", "spinal erectors",
   ],
+  biceps: [
+    "biceps", "biceps brachii", "brachialis",
+  ],
 };
 
 const MUSCLE_ALIASES: Record<string, string> = {
@@ -23,6 +26,8 @@ const MUSCLE_ALIASES: Record<string, string> = {
   "rhomboid minor": "rhomboids",
   trapezius: "traps",
   "spinal erectors": "erector spinae",
+  "biceps brachii": "biceps",
+  brachialis: "biceps",
 };
 
 const GROUP_ROOTS = new Set(Object.keys(MUSCLE_GROUPS));
