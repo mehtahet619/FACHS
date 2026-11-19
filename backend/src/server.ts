@@ -32,6 +32,7 @@ const tracedApiPaths = new Set([
   "/auth/login", "/auth/me", "/auth/refresh",
   "/progress/dashboard", "/user/profile", "/workouts/plan",
   "/nutrition/today", "/gym/today",
+  "/friends/accept-invite", "/friends/leaderboard",
 ]);
 app.use((req, res, next) => {
   if (!tracedApiPaths.has(req.path)) return next();
