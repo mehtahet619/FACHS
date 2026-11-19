@@ -3,7 +3,7 @@ import type { Server } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DatabaseLike } from "../db/types";
 import { CsvExerciseRepository } from "../modules/workouts/exerciseCsvRepository";
-import { CsvExerciseRecommendationService, exerciseFamilyKey } from "../modules/workouts/exerciseRecommendation";
+import { CsvExerciseRecommendationService, exerciseFamilyKey, exerciseRecommendationService } from "../modules/workouts/exerciseRecommendation";
 import { CANONICAL_EQUIPMENT } from "../modules/equipment/catalog";
 
 type Row = Record<string, any>;
@@ -468,26 +468,19 @@ describe("workout API CSV flow", () => {
       expect(state.workoutExercises.map((exercise) => exercise.orderIndex).sort((a, b) => a - b)).toEqual(Array.from({ length: 4 }, (_, index) => index));
       expect(new Set(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId).map((row) => row.familyKey)).size).toBe(2);
 
-      const historyBeforeSecondSwap = state.swapHistory
-        .filter((row) => row.workoutExerciseId === slot.workoutExerciseId)
-        .map((row) => row.familyKey);
       const secondSwapResponse = await fetch(`${baseUrl}/workouts/${before.id}/replace-exercise`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workoutExerciseId: slot.workoutExerciseId, reason: "user_preference" }),
       });
       const secondSwapBody = await secondSwapResponse.json() as any;
-      if (secondSwapResponse.status === 200) {
-        const secondFamily = exerciseFamilyKey(secondSwapBody.exercise.exerciseName);
-        expect(historyBeforeSecondSwap).not.toContain(secondFamily);
-        expect(secondFamily).not.toBe(exerciseFamilyKey(slot.exerciseName));
-        expect(secondFamily).not.toBe(exerciseFamilyKey(swapped.exercise.exerciseName));
-        expect(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId)
-          .some((row) => row.familyKey === secondFamily)).toBe(true);
-      } else {
-        expect(secondSwapResponse.status).toBe(422);
-        expect(secondSwapBody.error).toMatch(/no curated CSV substitute matches/i);
-        expect(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId)).toHaveLength(2);
-      }
+      expect(secondSwapResponse.status).toBe(200);
+      const secondFamily = exerciseFamilyKey(secondSwapBody.exercise.exerciseName);
+      expect(secondFamily).not.toBe(exerciseFamilyKey(swapped.exercise.exerciseName));
+      expect(after.exercises.filter((exercise: any) => exercise.workoutExerciseId !== slot.workoutExerciseId).some(
+        (exercise: any) => exercise.exerciseName === secondSwapBody.exercise.exerciseName,
+      )).toBe(false);
+      expect(state.swapHistory.filter((row) => row.workoutExerciseId === slot.workoutExerciseId)
+        .some((row) => row.familyKey === secondFamily)).toBe(true);
 
       const reorderIds = [...state.workoutExercises]
         .filter((exercise) => exercise.workoutId === before.id)
@@ -649,6 +642,7 @@ describe("workout API CSV flow", () => {
           expect.objectContaining({ workoutExerciseId: row.id, exerciseId: row.exerciseId, exerciseName: row.sourceExerciseName }),
         ]));
       }
+      const catalogueFallbackSpy = vi.spyOn(exerciseRecommendationService, "getRecommendedExercises");
       const confirmedResponse = await fetch(`${baseUrl}/workouts/${before.id}/edit-exercise`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -657,6 +651,10 @@ describe("workout API CSV flow", () => {
         }),
       });
       expect(confirmedResponse.status).toBe(200);
+      // When AI supplies every valid replacement, the CSV catalogue must not
+      // run at all. It is only a last-resort fill for missing AI slots.
+      expect(catalogueFallbackSpy).not.toHaveBeenCalled();
+      catalogueFallbackSpy.mockRestore();
       expect(state.workoutExercises.find((exercise) => exercise.id === editSlotId)?.exerciseId).toBe("catalog-dumbbell-deadlift");
       const refreshedWorkoutResponse = await fetch(`${baseUrl}/workouts/today`);
       expect(refreshedWorkoutResponse.status).toBe(200);

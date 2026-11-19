@@ -279,39 +279,8 @@ export async function generateWorkout(
     excludedFamilyKeys: options?.excludedExerciseFamilyKeys,
   });
 
-  // OpenRouter is an enhancement, not a hard dependency for workout creation.
-  // If it fails or returns too few valid exercises, use FACHS's bundled catalogue.
-  if (aiExercises.length !== requestedCount) {
-    console.warn(`[workouts] AI returned ${aiExercises.length}/${requestedCount}; falling back to the bundled exercise catalogue.`);
-    const catalogue = exerciseRecommendationService.getRecommendedExercises({
-      targetMuscles: unitMuscles,
-      sessionDurationMinutes: durationMin,
-      requestedCount,
-      equipmentMode,
-      availableEquipment: fallbackEquipment.flatMap((item) => [item.name, ...item.aliases]),
-      excludedExerciseNames: options?.excludedExerciseNames,
-      excludedExerciseFamilyKeys: options?.excludedExerciseFamilyKeys,
-      selectionSeed: options?.selectionSeed,
-    });
-    aiExercises = catalogue.exercises.map((exercise) => ({
-      sourceIndex: exercise.sourceIndex,
-      exercise: exercise.exercise,
-      machine: exercise.machine,
-      muscle: exercise.primaryMuscle,
-      primaryMuscle: exercise.primaryMuscle,
-      muscleCategories: exercise.muscleCategories,
-      timeTakenOneSet: exercise.timeTakenOneSet || "25-45 sec",
-      targetedMuscle: exercise.targetedMuscle || exercise.primaryMuscle,
-      targetedMuscles: exercise.targetedMuscles.length ? exercise.targetedMuscles : [exercise.primaryMuscle],
-      instructions: "Use controlled form and a comfortable range of motion. Stop if you feel pain.",
-      sets: 3,
-      repRangeLow: 8,
-      repRangeHigh: 12,
-    }));
-    if (aiExercises.length === 0) {
-      throw new Error(`No bundled catalogue exercises match the requested muscles and available equipment (requested ${requestedCount}).`);
-    }
-  }
+  // Keep every valid AI-generated exercise. The bundled catalogue is only
+  // consulted later for the exact number of slots the model could not fill.
   // Deduplicate AI output first, then fill any missing slots from the trusted
   // catalogue. Duplicate model suggestions must never make a valid workout fail.
   const seenMovementFamilies = new Set<string>();

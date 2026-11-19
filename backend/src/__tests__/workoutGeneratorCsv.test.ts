@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { DatabaseLike } from "../db/types";
 import { csvExerciseRepository } from "../modules/workouts/exerciseCsvRepository";
 import { generateWorkout } from "../modules/workouts/workoutGenerator.js";
+import { getAiExerciseFallback } from "../modules/workouts/exerciseAiFallback";
 
 vi.mock("../modules/workouts/exerciseAiFallback", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../modules/workouts/exerciseAiFallback")>();
@@ -104,6 +105,33 @@ describe("OpenRouter workout generation", () => {
     expect(result.exercises.some((exercise) => csvExerciseRepository.getAll().some((row) => row.exercise === exercise.exerciseName))).toBe(false);
     expect(state).toEqual(before);
     expect(queries.some((sql) => /UPDATE\\s+WorkoutPlanState|INSERT\\s+INTO\\s+WorkoutCycleHistory/i.test(sql))).toBe(false);
+  });
+
+  it("keeps valid AI exercises and uses CSV only to fill missing slots", async () => {
+    const { db } = memoryDatabase();
+    vi.mocked(getAiExerciseFallback).mockResolvedValueOnce([{
+      sourceIndex: -101,
+      exercise: "AI-Only Chest Press",
+      machine: "Bodyweight",
+      muscle: "chest",
+      primaryMuscle: "chest",
+      muscleCategories: ["chest"],
+      timeTakenOneSet: "25-45 sec",
+      targetedMuscle: "chest",
+      targetedMuscles: ["chest"],
+      instructions: "Perform a controlled push-up variation.",
+      sets: 3,
+      repRangeLow: 8,
+      repRangeHigh: 12,
+    }]);
+    const result = await generateWorkout(db, "partial-ai-user", "Chest", 60, {
+      lockToMuscles: ["chest"],
+      equipmentMode: "FULL_GYM",
+    });
+    expect(result.exercises).toHaveLength(3);
+    expect(result.exercises.some((exercise) => exercise.exerciseName === "AI-Only Chest Press")).toBe(true);
+    expect(result.exercises.filter((exercise) => exercise.exerciseName !== "AI-Only Chest Press")
+      .every((exercise) => csvExerciseRepository.getAll().some((row) => row.exercise === exercise.exerciseName))).toBe(true);
   });
 
   it("keeps PPL target muscles constrained and returns distinct generated movements", async () => {
