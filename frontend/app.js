@@ -605,7 +605,7 @@ $("login-otp-submit").addEventListener("click", async () => {
   try {
     const data = await Api.post("/auth/login/verify-otp", { email: loginOtpEmail, otp: $("login-otp").value.trim() });
     if (data.accessToken) Api.setTokens(data.accessToken, data.refreshToken);
-    sessionStorage.removeItem("loginOtpEmail"); AuthState.authenticated(data.user); const destination = sessionStorage.getItem("fitos_open_rewards_after_invite") === "1" && AuthState.profileComplete === true ? "/friends" : "/gym"; if (destination === "/friends") sessionStorage.removeItem("fitos_open_rewards_after_invite"); navigate(destination, true); if (destination === "/gym") void handleGymChoiceAfterLogin();
+    sessionStorage.removeItem("loginOtpEmail"); AuthState.authenticated(data.user); const destination = sessionStorage.getItem("fitos_open_rewards_after_invite") === "1" && AuthState.profileComplete === true ? "/friends" : "/gym"; if (destination === "/friends") sessionStorage.removeItem("fitos_open_rewards_after_invite"); navigate(destination, true);
   } catch (e) { banner(bannerEl, "error", e.message || "Could not verify the sign-in code."); }
 });
 
