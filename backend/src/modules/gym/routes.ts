@@ -12,13 +12,14 @@ registerGymMlRoutes(gymRouter);
 gymRouter.use(requireAuth);
 
 function todayDateStr(): string {
-  // Local server date as YYYY-MM-DD (not full ISO) — this is the key the
-  // one-per-day UNIQUE constraint is enforced against.
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  // Keep attendance dates aligned with workout-session checks in Asia/Kolkata,
+  // regardless of the server's UTC/local timezone.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 gymRouter.get("/today", async (req: AuthedRequest, res) => {
