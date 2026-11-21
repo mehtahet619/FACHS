@@ -458,7 +458,6 @@ function showScreen(id) {
     AuthState.authenticated(data.user);
     if (["/login", "/register"].includes(normalizePath(location.pathname))) navigate("/homepage", true);
     else await routeCurrent();
-    await handleGymChoiceAfterLogin();
   } catch (e) {
       if (!isLandingRoute) await keepIntroVisible();
     if (generation !== authBootGeneration) return;
@@ -529,46 +528,6 @@ function showGymChoiceModal() {
   });
 }
 
-let gymChoiceInProgress = false;
-
-async function handleGymChoiceAfterLogin() {
-  if (AuthState.status !== "AUTHENTICATED" || AuthState.profileComplete !== true || gymChoiceInProgress) return;
-  const today = getLocalDateKey();
-  if (sessionStorage.getItem("gymChoiceHandledDate") === today) return;
-
-  gymChoiceInProgress = true;
-  try {
-    // Always land on the Gym tab first. The daily confirmation belongs on this screen,
-    // not on the login page or the previous homepage.
-    navigate("/gym", true);
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-    const profile = await Api.get("/equipment/gym-profile");
-    if (!profile?.gymTourCompleted) {
-      sessionStorage.setItem("gymChoiceHandledDate", today);
-      navigate("/equipment", true);
-      return;
-    }
-    if (profile.lastConfirmedDate === today) {
-      sessionStorage.setItem("gymChoiceHandledDate", today);
-      return;
-    }
-
-    const sameGym = await showGymChoiceModal();
-    if (sameGym) {
-      await Api.post("/equipment/gym-profile/confirm-same", { confirmedDate: today });
-      sessionStorage.setItem("gymChoiceHandledDate", today);
-      navigate("/workout", true);
-    } else {
-      sessionStorage.setItem("gymChoiceHandledDate", today);
-      navigate("/equipment", true);
-    }
-  } catch (error) {
-    console.error("[GymProfile] Could not resolve today's gym choice:", error);
-  } finally {
-    gymChoiceInProgress = false;
-  }
-}
 
 async function keepIntroVisible() {
   const sceneReady = window.FitOSIntroReady || Promise.resolve();
@@ -615,7 +574,6 @@ $("auth-submit").addEventListener("click", async () => {
     const destination = sessionStorage.getItem("fitos_open_rewards_after_invite") === "1" && AuthState.profileComplete === true ? "/friends" : "/gym";
     if (destination === "/friends") sessionStorage.removeItem("fitos_open_rewards_after_invite");
     navigate(destination, true);
-    if (destination === "/gym") void handleGymChoiceAfterLogin();
   } catch (e) {
     if (e.body?.code === "EMAIL_NOT_VERIFIED") { showVerify(email); return; }
     banner(bannerEl, "error", e.message || "Something went wrong.");
@@ -870,7 +828,6 @@ function enterMainApp() {
     return;
   }
   navigate("/gym", true);
-  void handleGymChoiceAfterLogin();
 }
 
 document.querySelectorAll(".nav-item").forEach((btn) => {
