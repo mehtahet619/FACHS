@@ -90,15 +90,15 @@ async function expirePreviousDayWorkout(dbConn: typeof db, userId: string, now =
   if (!workout || workout.status !== "pending" || !workout.createdAt) return false;
   if (localDateKey(workout.createdAt) >= localDateKey(now)) return false;
 
-  try {
-    await completeWorkout(dbConn, userId, { workoutId: workout.id }, workout.createdAt);
-  } catch (error: any) {
-    console.warn(`[workouts] Could not advance expired workout ${workout.id}: ${error?.message || error}`);
-    return false;
-  }
+  // Expiration is not workout completion. Never advance the plan or award
+  // progress for an unfinished session when the user did not complete it.
   await dbConn.run(
     `UPDATE Workout SET status = 'expired', completedAt = NULL WHERE id = ? AND userId = ? AND status = 'pending'`,
     workout.id, userId
+  );
+  await dbConn.run(
+    `UPDATE WorkoutPlanState SET activeWorkoutId = NULL WHERE userId = ? AND activeWorkoutId = ?`,
+    userId, workout.id
   );
   return true;
 }
