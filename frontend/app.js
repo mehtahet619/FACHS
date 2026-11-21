@@ -1389,6 +1389,7 @@ function renderTodayError(el, message) {
 
 /* ================= WORKOUT ================= */
 const WORKOUT_MISSING_AFTER_MS = 22 * 60 * 60 * 1000;
+let workoutGymCheckedIn = false;
 
 function shouldShowWorkoutMissing(plan, workoutHistory, gymStatus, now = Date.now()) {
   // A recorded gym check-in is the only signal that suppresses the missing state.
@@ -1429,6 +1430,7 @@ async function loadWorkout() {
       Api.get("/workouts/history"),
       Api.get("/gym/today"),
     ]);
+    workoutGymCheckedIn = gymStatus?.checkedIn === true;
     const workoutHistory = Array.isArray(historyResponse)
       ? historyResponse
       : historyResponse?.history || [];
@@ -2162,7 +2164,7 @@ function renderWorkout(workout, plan) {
     ...(Array.isArray(workout.availableEquipmentNames) ? workout.availableEquipmentNames : []),
     ...exercises.map((exercise) => exercise.machine).filter(Boolean),
   ].filter((name) => name !== "FULL_GYM"))];
-  const canEditWorkout = !completedWorkout && loggedSets === 0;
+  const canEditWorkout = workoutGymCheckedIn && !completedWorkout && loggedSets === 0;
   const equipmentLine = (exercise) => exercise.machine || (exercise.requiresEquipment
     ? (exercise.equipmentRequired || []).join(", ") || exercise.equipmentName || "Gym equipment"
     : "Bodyweight");
@@ -2178,7 +2180,9 @@ function renderWorkout(workout, plan) {
     : "";
 
   $("workout-focus-label").textContent = `${workout.focus} · ${duration} min`;
-  const activeExerciseCard = active
+  const activeExerciseCard = !workoutGymCheckedIn && !completedWorkout
+    ? `<section class="workout-next-card"><div class="workout-eyebrow">WORKOUT PREVIEW</div><h2>${escapeWorkoutText(active?.exercise?.exerciseName || workoutName)}</h2><p>Check in to your gym to activate this session. Until then, FACHS will not log sets, advance exercises, or count this workout as completed.</p><a class="btn btn-primary" href="/gym">Go to gym check-in</a></section>`
+    : active
     ? (() => {
       const exercise = active.exercise;
       const low = Number(exercise.repRangeLow) || 1;
@@ -2289,7 +2293,7 @@ function renderWorkout(workout, plan) {
       <datalist id="workout-equipment-options">${equipmentChoices.map((name) => `<option value="${escapeWorkoutText(name)}"></option>`).join("")}</datalist>
     </section>
     ${completedWorkout && plan ? renderActivePlanCard(plan) : ""}
-    ${!completedWorkout ? `<div class="workout-finish-note">You can finish early. Sets you haven't logged won't be added to your training history.</div><button class="btn btn-primary" id="complete-workout-btn">Finish workout</button>` : ""}
+    ${!completedWorkout && workoutGymCheckedIn ? `<div class="workout-finish-note">You can finish early. Sets you haven't logged won't be added to your training history.</div><button class="btn btn-primary" id="complete-workout-btn">Finish workout</button>` : ""}
   `;
 
   const changeDurationButton = $("change-workout-duration");
