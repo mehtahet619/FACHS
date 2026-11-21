@@ -46,6 +46,17 @@ export const workoutRouter = Router();
 workoutRouter.use(requireAuth);
 const AI_WORKOUT_GENERATOR_VERSION = "openrouter-v1";
 const APP_TIME_ZONE = process.env.APP_TIME_ZONE || "Asia/Kolkata";
+async function hasGymCheckinToday(userId: string): Promise<boolean> {
+  const attendance = await db.get<{ id: string }>(
+    `SELECT id FROM GymAttendance WHERE userId = ? AND date = ? LIMIT 1`,
+    userId,
+    localDateKey(),
+  );
+  return Boolean(attendance);
+}
+function requireGymCheckin(res: any): boolean {
+  return false;
+}
 function localDateKey(value: string | Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: APP_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
@@ -818,6 +829,9 @@ workoutRouter.post("/:id/complete-set", async (req: AuthedRequest, res) => {
   const parsed = completeSetSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
   const { workoutExerciseId, setNumber, weightKg, reps } = parsed.data;
+  if (!(await hasGymCheckinToday(req.userId!))) {
+    return res.status(403).json({ code: "GYM_CHECKIN_REQUIRED", error: "Check in to your gym before logging sets or advancing your workout." });
+  }
   const workout = await db.get<any>(`SELECT id, userId, status FROM Workout WHERE id = ?`, req.params.id);
   if (!workout || workout.userId !== req.userId)
     return res.status(404).json({ error: "Workout not found" });
@@ -865,6 +879,9 @@ workoutRouter.post("/:id/complete", async (req: AuthedRequest, res) => {
   const parsed = finishWorkoutSchema.safeParse(req.body ?? {});
   if (!parsed.success) return res.status(400).json({ error: "Invalid workout completion data." });
   const userId = req.userId!;
+  if (!(await hasGymCheckinToday(userId))) {
+    return res.status(403).json({ code: "GYM_CHECKIN_REQUIRED", error: "Check in to your gym before completing your workout." });
+  }
   await expirePreviousDayWorkout(db, userId);
   const workout = await db.get<any>(`SELECT * FROM Workout WHERE id = ?`, req.params.id);
   if (!workout || workout.userId !== userId)
@@ -1518,6 +1535,9 @@ workoutRouter.post("/:id/edit-exercise", async (req: AuthedRequest, res) => {
 });
 
 workoutRouter.post("/:id/skip-exercise", async (req: AuthedRequest, res) => {
+  if (!(await hasGymCheckinToday(req.userId!))) {
+    return res.status(403).json({ code: "GYM_CHECKIN_REQUIRED", error: "Check in to your gym before advancing exercises." });
+  }
   const { workoutExerciseId } = req.body || {};
   const exercise = await db.get<any>(`SELECT * FROM WorkoutExercise WHERE id = ?`, workoutExerciseId);
   if (!exercise || exercise.workoutId !== req.params.id)
