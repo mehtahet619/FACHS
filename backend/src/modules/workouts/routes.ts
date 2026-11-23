@@ -74,35 +74,82 @@ async function getDailyWorkoutCompletion(state: Awaited<ReturnType<typeof getPla
 }
 
 /**
- * Reconcile an unfinished workout from a previous local calendar day.
- * It advances the plan step but marks the workout as expired, not completed.
- * No sets/history are fabricated and it does not lock today's workout.
- * This runs on workout requests, catching up after server restarts or downtime.
+ * Finalize yesterday's generated workout when the user checked into the gym
+ * before generating it. Generation persists the workout and its exercises;
+ * this rollover applies the same completion/progression effects as Finish
+ * Workout, without fabricating set measurements.
+ *
+ * If there was no attendance before generation, the pending workout expires
+ * and the plan step remains pending.
  */
 async function expirePreviousDayWorkout(dbConn: typeof db, userId: string, now = new Date()): Promise<boolean> {
   const state = await getPlanState(dbConn, userId);
   if (!state?.activeWorkoutId || state.cycleStatus !== "IN_PROGRESS") return false;
+
   const workout = await dbConn.get<any>(
-    `SELECT * FROM Workout WHERE id = ?`,
-    state.activeWorkoutId
+    `SELECT * FROM Workout WHERE id = ? AND userId = ?`,
+    state.activeWorkoutId,
+    userId,
   );
-  if (workout && workout.userId !== userId) return false;
   if (!workout || workout.status !== "pending" || !workout.createdAt) return false;
   if (localDateKey(workout.createdAt) >= localDateKey(now)) return false;
 
-  // Expiration is not workout completion. Never advance the plan or award
-  // progress for an unfinished session when the user did not complete it.
-  await dbConn.run(
-    `UPDATE Workout SET status = 'expired', completedAt = NULL WHERE id = ? AND userId = ? AND status = 'pending'`,
-    workout.id, userId
+  const workoutDate = localDateKey(workout.createdAt);
+  const attendance = await dbConn.get<{ checkedInAt: string }>(
+    `SELECT checkedInAt FROM GymAttendance WHERE userId = ? AND date = ? LIMIT 1`,
+    userId,
+    workoutDate,
   );
-  await dbConn.run(
-    `UPDATE WorkoutPlanState SET activeWorkoutId = NULL WHERE userId = ? AND activeWorkoutId = ?`,
-    userId, workout.id
+  const checkedInBeforeGeneration = Boolean(
+    attendance?.checkedInAt
+    && new Date(attendance.checkedInAt).getTime() <= new Date(workout.createdAt).getTime()
   );
-  return true;
-}
 
+  if (!checkedInBeforeGeneration) {
+    await dbConn.run(
+      `UPDATE Workout SET status = 'expired', completedAt = NULL WHERE id = ? AND userId = ? AND status = 'pending'`,
+      workout.id, userId,
+    );
+    await dbConn.run(
+      `UPDATE WorkoutPlanState SET activeWorkoutId = NULL WHERE userId = ? AND activeWorkoutId = ?`,
+      userId, workout.id,
+    );
+    return true;
+  }
+
+  const completedAt = now.toISOString();
+  const finalize = async (connection: typeof db) => {
+    const result = await connection.run(
+      `UPDATE Workout SET status = 'completed', completedAt = ? WHERE id = ? AND userId = ? AND status = 'pending'`,
+      completedAt, workout.id, userId,
+    );
+    // Conditional update makes rollover idempotent if two requests arrive together.
+    if (result.changes === 0) return false;
+
+    await connection.run(
+      `UPDATE WorkoutExercise SET status = 'completed' WHERE workoutId = ? AND status = 'pending'`,
+      workout.id,
+    );
+    const currentState = await getPlanState(connection, userId);
+    if (currentState?.activeWorkoutId === workout.id) {
+      await completeWorkout(connection, userId, { workoutId: workout.id }, completedAt);
+    }
+    return true;
+  };
+
+  const didComplete = dbConn.transaction
+    ? await dbConn.transaction(finalize)
+    : await finalize(dbConn);
+
+  if (didComplete) {
+    try {
+      await refreshProgressForCompletedWorkout(dbConn, userId, completedAt);
+    } catch {
+      console.error("[GrowImpact] Monthly progress refresh failed after automatic workout completion.");
+    }
+  }
+  return didComplete;
+}
 
 function belongsToCurrentPlanStep(workout: any, state: any, planStepIndex: number): boolean {
   if (!workout || !state) return false;
