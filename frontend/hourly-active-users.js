@@ -82,8 +82,7 @@
 
   // Show the requested example value immediately; schedule-driven values begin on the first minute.
   countNode.textContent = STARTING_COUNT.toLocaleString("en-IN");
-  const initialParts = istParts(new Date());
-  updatedNode.textContent = "Updates every 60 seconds · IST";
+  update();
   timerId = window.setInterval(update, 60 * 1000);
   window.addEventListener("pagehide", () => {
     if (timerId !== null) window.clearInterval(timerId);
