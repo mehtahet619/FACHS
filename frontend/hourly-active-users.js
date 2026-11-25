@@ -2,45 +2,51 @@
   "use strict";
 
   const countNode = document.getElementById("hourly-active-count");
+  const shareNode = document.getElementById("hourly-active-share");
   const updatedNode = document.getElementById("hourly-active-updated");
-  if (!countNode || !updatedNode) return;
+  if (!countNode || !shareNode || !updatedNode) return;
 
-  const STARTING_COUNT = 2059;
+  const TOTAL_USERS = 2059;
   const IST = "Asia/Kolkata";
-  // Daily activity curve: [minute after midnight, expected activity].
-  // The 12:00–14:30 interval is intentionally a zero-activity plateau.
+  const UPDATE_INTERVAL = 10 * 60 * 1000;
+
+  // Expected activity by time of day (IST). The evening peak is capped at 500.
+  // Values are interpolated so the count rises and falls gradually.
   const curve = [
-    [0, 13], [300, 12], [360, 17], [420, 164], [480, 247],
-    [540, 226], [600, 181], [660, 143], [720, 0],
-    [870, 0], [900, 103], [960, 1007], [1020, 2003],
-    [1080, 2993], [1140, 2681], [1200, 2173], [1260, 1471],
-    [1320, 817], [1380, 307], [1440, 13]
+    [0, 8], [300, 3], [360, 18], [420, 155], [480, 245],
+    [540, 220], [600, 170], [660, 110], [720, 75],
+    [840, 45], [900, 60], [960, 120], [1020, 210],
+    [1080, 300], [1100, 370], [1120, 430], [1140, 480],
+    [1150, 500], [1160, 470], [1170, 430], [1180, 340],
+    [1190, 80], [1199, 12], [1200, 12], [1440, 5]
   ];
 
-  let displayedCount = STARTING_COUNT;
-  let timerId = null;
+  let displayedCount = null;
+  let intervalId = null;
+  let timeoutId = null;
 
   function istParts(date) {
     const parts = new Intl.DateTimeFormat("en-GB", {
-      timeZone: IST, year: "numeric", month: "2-digit", day: "2-digit",
-      hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+      timeZone: IST,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23"
     }).formatToParts(date);
     return Object.fromEntries(parts.map((part) => [part.type, part.value]));
   }
 
-  function dailyFactor(dateKey) {
-    let hash = 216; 
-    for (const char of dateKey) hash = (hash * 31 + char.charCodeAt(0)) % 1000003;
-    return 0.94 + (hash % 121) / 1000;
+  function stableNoise(seed) {
+    let hash = 216;
+    for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) % 1000003;
+    return hash;
   }
 
-  function randomBetween(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-  }
-
-  function expectedCount(minuteOfDay, factor) {
-    if (minuteOfDay >= 720 && minuteOfDay < 870) return 0;
-    let left = curve[0], right = curve[curve.length - 1];
+  function expectedCount(minuteOfDay, dateKey, bucket) {
+    let left = curve[0];
+    let right = curve[curve.length - 1];
     for (let i = 1; i < curve.length; i += 1) {
       if (minuteOfDay <= curve[i][0]) {
         left = curve[i - 1];
@@ -48,43 +54,65 @@
         break;
       }
     }
+
     const span = right[0] - left[0] || 1;
     const progress = (minuteOfDay - left[0]) / span;
-    return Math.max(0, Math.round((left[1] + (right[1] - left[1]) * progress) * factor));
+    const baseline = left[1] + (right[1] - left[1]) * progress;
+    const seed = stableNoise(dateKey + ":" + bucket);
+    const dailyFactor = 0.94 + (stableNoise(dateKey) % 121) / 1000;
+    const noiseRange = Math.max(1, Math.round(baseline * 0.045));
+    const noise = (seed % (noiseRange * 2 + 1)) - noiseRange;
+    let target = Math.round(baseline * dailyFactor + noise);
+
+    // At and after 8:00 PM, always show fewer than 20 active users.
+    if (minuteOfDay >= 1200) target = Math.min(target, 19);
+    return Math.min(500, Math.max(1, target));
   }
 
   function render(value, parts) {
-    countNode.textContent = Math.max(0, value).toLocaleString("en-IN");
-    updatedNode.textContent = "Updated " + parts.hour + ":" + parts.minute + " IST · refreshes every 60 seconds";
+    const percentage = (value / TOTAL_USERS * 100).toFixed(2);
+    countNode.textContent = value.toLocaleString("en-IN");
+    shareNode.textContent = value.toLocaleString("en-IN") + " of " +
+      TOTAL_USERS.toLocaleString("en-IN") + " total users · " + percentage + "% active";
+    updatedNode.textContent = "Updated " + parts.hour + ":" + parts.minute +
+      " IST · refreshes every 10 minutes";
   }
 
   function update() {
     const now = new Date();
     const parts = istParts(now);
     const minuteOfDay = Number(parts.hour) * 60 + Number(parts.minute);
-    const factor = dailyFactor(parts.year + parts.month + parts.day);
-    const target = expectedCount(minuteOfDay, factor);
+    const dateKey = parts.year + parts.month + parts.day;
+    const bucket = Math.floor(minuteOfDay / 10);
+    const target = expectedCount(minuteOfDay, dateKey, bucket);
 
-    if (target === 0) {
-      displayedCount = 0;
+    if (displayedCount === null) {
+      displayedCount = target;
+    } else if (minuteOfDay >= 1200) {
+      displayedCount = Math.min(target, 19);
     } else {
       const difference = target - displayedCount;
-      const easingStep = Math.max(1, Math.round(difference * 0.18));
-      const jitter = randomBetween(-Math.max(2, Math.round(target * 0.012)), Math.max(2, Math.round(target * 0.012)));
-      displayedCount = Math.max(0, Math.round(displayedCount + easingStep + jitter));
+      const step = Math.max(-30, Math.min(30, difference));
+      displayedCount = Math.max(1, Math.min(500, displayedCount + step));
     }
 
-    // Avoid an artificial-looking rounded value while preserving the exact zero window.
-    if (target > 0 && displayedCount > 0 && displayedCount % 10 === 0) displayedCount += randomBetween(-2, 3);
-    displayedCount = Math.max(0, displayedCount);
-    render(displayedCount, parts);
+    render(Math.round(displayedCount), parts);
   }
 
-  // Show the requested example value immediately; schedule-driven values begin on the first minute.
-  countNode.textContent = STARTING_COUNT.toLocaleString("en-IN");
+  function scheduleUpdates() {
+    const now = new Date();
+    const delay = UPDATE_INTERVAL - (now.getTime() % UPDATE_INTERVAL);
+    timeoutId = window.setTimeout(() => {
+      update();
+      intervalId = window.setInterval(update, UPDATE_INTERVAL);
+    }, delay);
+  }
+
   update();
-  timerId = window.setInterval(update, 60 * 1000);
+  scheduleUpdates();
+
   window.addEventListener("pagehide", () => {
-    if (timerId !== null) window.clearInterval(timerId);
+    if (timeoutId !== null) window.clearTimeout(timeoutId);
+    if (intervalId !== null) window.clearInterval(intervalId);
   }, { once: true });
 })();
