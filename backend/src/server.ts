@@ -157,8 +157,8 @@ app.get("/pricing-guesses", async (req, res) => {
 
 app.post("/pricing-guesses", async (req: Request, res: Response) => {
   const price = req.body?.price;
-  if (!Number.isSafeInteger(price) || price < 1 || price > 100000) {
-    return res.status(400).json({ error: "Enter a whole price between ₹1 and ₹1,00,000." });
+  if (!Number.isSafeInteger(price) || price < 99 || price > 3000) {
+    return res.status(400).json({ error: "Enter a whole price between ₹99 and ₹3,000." });
   }
   const identity = await readIdentity(req);
   const guestId = typeof req.body?.guestId === "string" && GUEST_ID_PATTERN.test(req.body.guestId) ? req.body.guestId : undefined;
