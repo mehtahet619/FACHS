@@ -6,7 +6,8 @@
   const updatedNode = document.getElementById("hourly-active-updated");
   if (!countNode || !shareNode || !updatedNode) return;
 
-  const TOTAL_USERS = 2059;
+  const BASE_TOTAL_USERS = 2059;
+  const BASE_DATE = "2026-11-26"; // Total users on this IST date: 2,059.
   const IST = "Asia/Kolkata";
   const UPDATE_INTERVAL = 10 * 60 * 1000;
 
@@ -44,6 +45,25 @@
     return hash;
   }
 
+  function totalUsersFor(parts) {
+    const todayKey = parts.year + "-" + parts.month + "-" + parts.day;
+    const [baseYear, baseMonth, baseDay] = BASE_DATE.split("-").map(Number);
+    const [year, month, day] = todayKey.split("-").map(Number);
+    const baseUtc = Date.UTC(baseYear, baseMonth - 1, baseDay);
+    const todayUtc = Date.UTC(year, month - 1, day);
+    const daysElapsed = Math.max(0, Math.floor((todayUtc - baseUtc) / 86400000));
+
+    let total = BASE_TOTAL_USERS;
+    for (let dayOffset = 1; dayOffset <= daysElapsed; dayOffset += 1) {
+      const date = new Date(baseUtc + dayOffset * 86400000);
+      const dateKey = date.getUTCFullYear() + "-" +
+        String(date.getUTCMonth() + 1).padStart(2, "0") + "-" +
+        String(date.getUTCDate()).padStart(2, "0");
+      total += (stableNoise("daily-growth:" + dateKey) % 10) + 1;
+    }
+    return total;
+  }
+
   function expectedCount(minuteOfDay, dateKey, bucket) {
     // No simulated activity between midnight and 6:00 AM IST.
     if (minuteOfDay < 360) return 0;
@@ -72,11 +92,11 @@
     return Math.min(500, Math.max(1, target));
   }
 
-  function render(value, parts) {
-    const percentage = (value / TOTAL_USERS * 100).toFixed(2);
+  function render(value, totalUsers, parts) {
+    const percentage = (value / totalUsers * 100).toFixed(2);
     countNode.textContent = value.toLocaleString("en-IN");
     shareNode.textContent = value.toLocaleString("en-IN") + " of " +
-      TOTAL_USERS.toLocaleString("en-IN") + " total users · " + percentage + "% active";
+      totalUsers.toLocaleString("en-IN") + " total users · " + percentage + "% active";
     updatedNode.textContent = "Updated " + parts.hour + ":" + parts.minute +
       " IST · refreshes every 10 minutes";
   }
@@ -87,6 +107,7 @@
     const minuteOfDay = Number(parts.hour) * 60 + Number(parts.minute);
     const dateKey = parts.year + parts.month + parts.day;
     const bucket = Math.floor(minuteOfDay / 10);
+    const totalUsers = totalUsersFor(parts);
     const target = expectedCount(minuteOfDay, dateKey, bucket);
 
     if (minuteOfDay < 360) {
@@ -101,7 +122,7 @@
       displayedCount = Math.max(1, Math.min(500, displayedCount + step));
     }
 
-    render(Math.round(displayedCount), parts);
+    render(Math.round(displayedCount), totalUsers, parts);
   }
 
   function scheduleUpdates() {
