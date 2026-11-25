@@ -45,6 +45,9 @@
   }
 
   function expectedCount(minuteOfDay, dateKey, bucket) {
+    // No simulated activity between midnight and 6:00 AM IST.
+    if (minuteOfDay < 360) return 0;
+
     let left = curve[0];
     let right = curve[curve.length - 1];
     for (let i = 1; i < curve.length; i += 1) {
@@ -86,7 +89,9 @@
     const bucket = Math.floor(minuteOfDay / 10);
     const target = expectedCount(minuteOfDay, dateKey, bucket);
 
-    if (displayedCount === null) {
+    if (minuteOfDay < 360) {
+      displayedCount = 0;
+    } else if (displayedCount === null || displayedCount === 0) {
       displayedCount = target;
     } else if (minuteOfDay >= 1200) {
       displayedCount = Math.min(target, 19);
