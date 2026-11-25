@@ -58,8 +58,8 @@
     event.preventDefault();
     if (summary.hasGuessed) return;
     const price = Number(input.value);
-    if (!Number.isSafeInteger(price) || price < 1 || price > 100000) {
-      feedback.textContent = "Enter a whole amount between ₹1 and ₹1,00,000.";
+    if (!Number.isSafeInteger(price) || price < 99 || price > 3000) {
+      feedback.textContent = "Enter a whole amount between ₹99 and ₹3,000.";
       feedback.classList.add("is-error");
       input.focus();
       return;
