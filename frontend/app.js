@@ -3800,7 +3800,7 @@ function renderGymScan(equipment, plan) {
   };
 
   const savedTheme = readSavedTheme();
-  applyTheme(savedTheme === "dark" ? "dark" : "light");
+  applyTheme(savedTheme === "light" ? "light" : "dark");
   restorePosition();
 
   toggle?.addEventListener("pointerdown", (event) => {
