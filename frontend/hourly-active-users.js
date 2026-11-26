@@ -22,8 +22,6 @@
     [1190, 80], [1199, 12], [1200, 12], [1440, 5]
   ];
 
-  let displayedCount = null;
-  let intervalId = null;
   let timeoutId = null;
 
   function istParts(date) {
@@ -92,12 +90,14 @@
     return Math.min(500, Math.max(1, target));
   }
 
-  function render(value, totalUsers, parts) {
+  function render(value, totalUsers, parts, slotMinute) {
     const percentage = (value / totalUsers * 100).toFixed(2);
     countNode.textContent = value.toLocaleString("en-IN");
     shareNode.textContent = value.toLocaleString("en-IN") + " of " +
       totalUsers.toLocaleString("en-IN") + " total users · " + percentage + "% active";
-    updatedNode.textContent = "Updated " + parts.hour + ":" + parts.minute +
+    const slotHour = String(Math.floor(slotMinute / 60)).padStart(2, "0");
+    const slotMinuteText = String(slotMinute % 60).padStart(2, "0");
+    updatedNode.textContent = "Updated " + slotHour + ":" + slotMinuteText +
       " IST · refreshes every 10 minutes";
   }
 
@@ -105,40 +105,30 @@
     const now = new Date();
     const parts = istParts(now);
     const minuteOfDay = Number(parts.hour) * 60 + Number(parts.minute);
+    const slotMinute = Math.floor(minuteOfDay / 10) * 10;
     const dateKey = parts.year + parts.month + parts.day;
     const bucket = Math.floor(minuteOfDay / 10);
     const totalUsers = totalUsersFor(parts);
-    const target = expectedCount(minuteOfDay, dateKey, bucket);
 
-    if (minuteOfDay < 360) {
-      displayedCount = 0;
-    } else if (displayedCount === null || displayedCount === 0) {
-      displayedCount = target;
-    } else if (minuteOfDay >= 1200) {
-      displayedCount = Math.min(target, 19);
-    } else {
-      const difference = target - displayedCount;
-      const step = Math.max(-30, Math.min(30, difference));
-      displayedCount = Math.max(1, Math.min(500, displayedCount + step));
-    }
-
-    render(Math.round(displayedCount), totalUsers, parts);
+    // Derive the count only from the IST date and fixed 10-minute slot.
+    // Refreshes and separate visitors therefore always get the same value.
+    const value = expectedCount(minuteOfDay, dateKey, bucket);
+    render(value, totalUsers, parts, slotMinute);
   }
 
-  function scheduleUpdates() {
-    const now = new Date();
-    const delay = UPDATE_INTERVAL - (now.getTime() % UPDATE_INTERVAL);
+  function scheduleNextUpdate() {
+    // Align updates to wall-clock 10-minute boundaries, not page-load time.
+    const delay = UPDATE_INTERVAL - (Date.now() % UPDATE_INTERVAL);
     timeoutId = window.setTimeout(() => {
       update();
-      intervalId = window.setInterval(update, UPDATE_INTERVAL);
+      scheduleNextUpdate();
     }, delay);
   }
 
   update();
-  scheduleUpdates();
+  scheduleNextUpdate();
 
   window.addEventListener("pagehide", () => {
     if (timeoutId !== null) window.clearTimeout(timeoutId);
-    if (intervalId !== null) window.clearInterval(intervalId);
   }, { once: true });
 })();
