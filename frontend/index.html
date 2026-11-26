@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="theme-color" content="#f4f2ec" />
+<meta name="theme-color" content="#101512" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -14,10 +14,12 @@
 <script>
   try {
     const savedTheme = localStorage.getItem("fitos-theme");
-    document.documentElement.dataset.theme = savedTheme === "dark" ? "dark" : "light";
-    document.documentElement.style.colorScheme = savedTheme === "dark" ? "dark" : "light";
+    const initialTheme = savedTheme === "light" ? "light" : "dark";
+    document.documentElement.dataset.theme = initialTheme;
+    document.documentElement.style.colorScheme = initialTheme;
   } catch {
-    document.documentElement.dataset.theme = "light";
+    document.documentElement.dataset.theme = "dark";
+    document.documentElement.style.colorScheme = "dark";
   }
 </script>
 <link rel="canonical" href="https://adaptive-fit-web.onrender.com/" />
@@ -92,7 +94,7 @@
 </head>
 <body>
 <div id="app">
-  <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false" title="Switch theme"><span class="theme-toggle-icon" aria-hidden="true">☾</span><span class="theme-toggle-label">Dark mode</span></button>
+  <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to light mode" aria-pressed="true" title="Switch theme"><span class="theme-toggle-icon" aria-hidden="true">☀</span><span class="theme-toggle-label">Light mode</span></button>
 
   <!-- Public, crawlable landing page. The app shell remains separate below. -->
   <section id="screen-landing" class="screen active landing-page" aria-label="FACHS overview">
