@@ -151,7 +151,7 @@ const publicSiteUrl = window.PUBLIC_SITE_URL || "https://adaptive-fit-web.onrend
   }
 })();
 const routeMetadata = {
-  "/": ["AI Workout Planner Based on Gym Equipment | FACHS", "Build personalized gym workouts around your available equipment, training goals, workout split and time. Explore exercise alternatives and nearby food with FACHS."],
+  "/": ["FACHS – AI Workout Planner Based on Gym Equipment", "FACHS is an AI workout planner that builds personalized gym workouts around your available equipment, training goals, workout split and time. Explore exercise alternatives and fitness tools."],
   "/help": ["Help Center | FACHS", "Find help with FACHS workouts, equipment scanning, nutrition, gym discovery, and account access."],
   "/login": ["Log in to FACHS | Personalized Workout Planner", "Log in to your FACHS account to continue your workout and nutrition plan."],
   "/register": ["Create your FACHS account | Adaptive Workout Planner", "Create a FACHS account to build an equipment-aware training plan around your goals."],
