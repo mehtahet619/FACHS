@@ -1,0 +1,31 @@
+# FACHS
+
+> FACHS is an adaptive fitness platform with an AI-assisted workout planner that builds training sessions around a person's available gym equipment, goals, workout split, training history, and available time.
+
+FACHS helps people plan workouts using the equipment they can actually access. It also provides exercise alternatives, workout logging and history, and nutrition and food-discovery tools where supporting providers are available.
+
+## Main pages
+
+- [FACHS homepage](https://adaptive-fit-web.onrender.com/): Overview of the product, equipment-aware workout planning, features, and how to get started.
+- [Help Center](https://adaptive-fit-web.onrender.com/help): Product guidance for workouts, equipment scanning, nutrition, gym discovery, and account access.
+- [Terms of Use](https://adaptive-fit-web.onrender.com/terms): Terms governing use of FACHS.
+- [Privacy Policy](https://adaptive-fit-web.onrender.com/privacy): Information about data used by FACHS and its product features.
+
+## Key capabilities
+
+- Equipment-based workout planning: create sessions based on available machines, weights, and other equipment.
+- Adaptive workout planning: account for goals, training level, workout split, session duration, and workout history.
+- Exercise alternatives: find substitute exercises with similar movement intent and target muscles.
+- Workout tracking: record training and review workout history.
+- Nutrition tools: use meal-planning and food-discovery features when the relevant data providers are available.
+
+## Important notes
+
+- FACHS is a fitness planning and information tool, not a medical service.
+- Equipment recognition, nearby food discovery, and other provider-dependent features may vary in availability.
+- Nutrition values and restaurant/menu details may be estimates or incomplete; users should verify important details with the provider.
+
+## Discovery
+
+- [XML sitemap](https://adaptive-fit-web.onrender.com/sitemap.xml)
+- [Robots policy](https://adaptive-fit-web.onrender.com/robots.txt)
