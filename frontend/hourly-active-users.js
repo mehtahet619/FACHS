@@ -62,7 +62,26 @@
     return total;
   }
 
+  // Days when gyms are commonly closed across India: Sundays and the
+  // three nationwide national holidays. Regional/state holidays are excluded.
+  const GYM_CLOSED_NATIONAL_HOLIDAYS = new Set([
+    "01-26", // Republic Day
+    "08-15", // Independence Day
+    "10-02"  // Gandhi Jayanti
+  ]);
+
+  function isGymClosedDay(parts) {
+    const date = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)));
+    const isSunday = date.getUTCDay() === 0;
+    const isNationalHoliday = GYM_CLOSED_NATIONAL_HOLIDAYS.has(parts.month + "-" + parts.day);
+    return isSunday || isNationalHoliday;
+  }
+
   function expectedCount(minuteOfDay, dateKey, bucket) {
+    // Show zero activity all day on Sundays and nationwide gym-closure holidays.
+    // Regional/state holidays are intentionally not treated as nationwide closures.
+    if (isGymClosedDay({ year: dateKey.slice(0, 4), month: dateKey.slice(4, 6), day: dateKey.slice(6, 8) })) return 0;
+
     // No simulated activity between midnight and 6:00 AM IST.
     if (minuteOfDay < 360) return 0;
 
