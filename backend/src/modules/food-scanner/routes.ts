@@ -315,7 +315,7 @@ foodScannerRouter.get("/foods/search", async (req, res) => {
           ...p,
           product_name: p.product_name || p.product_name_en || "",
         }));
-      return res.json({ products, source: "Open Food Facts", count: products.length });
+      if (products.length) return res.json({ products, source: "Open Food Facts", count: products.length });
     }
     console.error("[food-search] legacy fallback returned HTTP", fallbackResponse.status);
   } catch (error) {
