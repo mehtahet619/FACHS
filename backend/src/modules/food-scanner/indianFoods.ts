@@ -16,7 +16,7 @@ export interface IndianFoodRecord {
   category: string;
 }
 export const INDIAN_FOODS: IndianFoodRecord[] = [
-  { name: "Protein Muesli (generic)", aliases: ["protein muesli", "protein museli", "protein musli", "museli", "muesli", "musli"], caloriesKcal: 390, proteinG: 18, carbsG: 58, fatG: 9, fiberG: 9, category: "packaged breakfast" },
+  { name: "Protein Muesli (generic)", aliases: ["protein muesli", "protein museli", "protein musli", "protein musleli", "musleli", "museli", "muesli", "musli"], caloriesKcal: 390, proteinG: 18, carbsG: 58, fatG: 9, fiberG: 9, category: "packaged breakfast" },
   { name: "Plain Muesli", aliases: ["plain muesli", "fruit muesli"], caloriesKcal: 370, proteinG: 10, carbsG: 68, fatG: 7, fiberG: 8, category: "packaged breakfast" },
   { name: "Soya Chunks (dry)", aliases: ["soya chunks", "soy chunks", "nutrela", "meal maker"], caloriesKcal: 345, proteinG: 52, carbsG: 33, fatG: 0.5, fiberG: 13, category: "high protein" },
   { name: "Sattu (roasted gram flour)", aliases: ["sattu", "roasted chana flour", "chana sattu"], caloriesKcal: 400, proteinG: 20, carbsG: 60, fatG: 7, fiberG: 18, category: "high protein" },
