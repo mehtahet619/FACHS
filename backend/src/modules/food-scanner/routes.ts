@@ -377,7 +377,7 @@ foodScannerRouter.post("/logs", requireAuth, async (req: AuthedRequest, res) => 
     if (nutrients[key] !== null && (!Number.isFinite(nutrients[key]) || nutrients[key]! < 0 || nutrients[key]! > 10000)) return res.status(400).json({ error: `Invalid value for ${key}.` });
   }
   const code = typeof b.productCode === "string" && PRODUCT_CODE.test(b.productCode) ? b.productCode : null;
-  const source = ["open_food_facts", "bonhappetee", "manual_label", "manual_entry"].includes(b.source) ? b.source : "manual_entry";
+  const source = ["open_food_facts", "bonhappetee", "fachs_indian_food_database", "spoonacular", "manual_label", "manual_entry"].includes(b.source) ? b.source : "manual_entry";
   const sourceUrl = source === "open_food_facts" && code ? OFF_PUBLIC_BASE + "/product/" + encodeURIComponent(code) : null;
   const now = nowIso();
   // Prevent accidental repeat submissions of the same product within 10 seconds.
