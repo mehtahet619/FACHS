@@ -406,7 +406,7 @@
       carbsG: field("food-review-carbs") === null ? null : round2(field("food-review-carbs") * scale),
       fatG: field("food-review-fat") === null ? null : round2(field("food-review-fat") * scale),
       fiberG: field("food-review-fiber") === null ? null : round2(field("food-review-fiber") * scale),
-      source: state.pendingManual ? "manual_label" : (product.source === "Spoonacular" ? "spoonacular" : product.source === "BonHappetee Food Nutrition API" ? "bonhappetee" : "open_food_facts")
+      source: state.pendingManual ? "manual_label" : (product.source === "Spoonacular" ? "spoonacular" : product.source === "BonHappetee Food Nutrition API" ? "bonhappetee" : product.source === "FACHS Indian Food Database" ? "fachs_indian_food_database" : product.source === "Spoonacular" ? "spoonacular" : "open_food_facts")
     };
     try {
       $("food-confirm-log").disabled = true;
