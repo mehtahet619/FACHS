@@ -2,6 +2,7 @@ import { Router } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { db, nowIso } from "../../db/client";
 import { AuthedRequest, requireAuth } from "../../common/auth";
+import { searchIndianFoods } from "./indianFoods";
 
 export const foodScannerRouter = Router();
 
@@ -319,6 +320,13 @@ foodScannerRouter.get("/foods/search", async (req, res) => {
     console.error("[food-search] legacy fallback returned HTTP", fallbackResponse.status);
   } catch (error) {
     console.error("[food-search] legacy fallback failed:", error instanceof Error ? error.message : "unknown error");
+  }
+
+  // Local Indian-food fallback runs when upstream catalogues have no usable match.
+  // It contains generic estimates only; branded products still require their own label/barcode.
+  const localFoods = searchIndianFoods(q);
+  if (localFoods.length) {
+    return res.json({ products: localFoods, source: "FACHS Indian Food Database", count: localFoods.length });
   }
 
   return res.status(502).json({
